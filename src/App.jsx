@@ -128,7 +128,9 @@ const App = () => {
                 </nav>
 
                 <div style={{ marginTop: 'auto', padding: '20px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)' }}>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '12px' }}>Açık Kaynak Kodlu</p>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '12px' }}>
+                        Açık Kaynak v1.3.0 <span style={{ color: '#10b981', fontWeight: 'bold' }}>(Live)</span>
+                    </p>
                     <a href="https://github.com" target="_blank" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', textDecoration: 'none', fontWeight: 600 }}>
                         <Github size={18} /> GitHub'da Yıldızla
                     </a>
