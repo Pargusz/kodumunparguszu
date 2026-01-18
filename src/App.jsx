@@ -214,7 +214,7 @@ const App = () => {
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '12px' }}>
                         Açık Kaynak v4.1 <span style={{ color: '#10b981', fontWeight: 'bold' }}>(Live Stats)</span>
                     </p>
-                    <a href="https://github.com" target="_blank" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', textDecoration: 'none', fontWeight: 600 }}>
+                    <a href="https://github.com/Pargusz/kodumunparguszu" target="_blank" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', textDecoration: 'none', fontWeight: 600 }}>
                         <Github size={18} /> GitHub'da Yıldızla
                     </a>
                 </div>
