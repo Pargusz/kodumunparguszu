@@ -82,7 +82,10 @@ const AiPromptLibrary = () => {
         // Fire request to background
         addDoc(collection(db, 'prompts'), promptData)
             .then(() => console.log("Background write success"))
-            .catch(err => console.error("Background write error:", err));
+            .catch(err => {
+                console.error("Background write error:", err);
+                setError(`Veritabanına yazılamadı (YETKİ HATASI OLABİLİR): ${err.message}. Sayfayı yenileyince bu prompt kaybolacaktır.`);
+            });
 
         // Close UI immediately
         setNewPrompt({ title: '', content: '', category: 'code', author: '' });
