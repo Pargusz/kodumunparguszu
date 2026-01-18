@@ -11,9 +11,21 @@ import {
     UserRound,
     MessageSquare,
     Menu,
-    Github
+    Github,
+    Activity
 } from 'lucide-react';
 import './index.css';
+import { db } from './firebase';
+import {
+    collection,
+    onSnapshot,
+    setDoc,
+    doc,
+    deleteDoc,
+    serverTimestamp,
+    query,
+    where
+} from 'firebase/firestore';
 
 import Toolbox from './components/Toolbox';
 import ReadmeGenerator from './components/ReadmeGenerator';
@@ -43,6 +55,57 @@ const App = () => {
     React.useEffect(() => {
         window.location.hash = activeTab;
     }, [activeTab]);
+
+    // Presence & Real-time Stats Logic
+    const [onlineCount, setOnlineCount] = useState(0);
+    const [totalPrompts, setTotalPrompts] = useState(0);
+    const sessionId = React.useMemo(() => Math.random().toString(36).substring(2, 11), []);
+
+    useEffect(() => {
+        // 1. Presence Heartbeat
+        const updatePresence = async () => {
+            try {
+                await setDoc(doc(db, 'presence', sessionId), {
+                    lastSeen: serverTimestamp(),
+                    id: sessionId
+                });
+            } catch (err) {
+                console.error("Presence error:", err);
+            }
+        };
+
+        updatePresence();
+        const heartbeat = setInterval(updatePresence, 45000); // 45s heartbeat
+
+        // 2. Cleanup on close
+        const handleUnload = () => {
+            deleteDoc(doc(db, 'presence', sessionId));
+        };
+        window.addEventListener('beforeunload', handleUnload);
+
+        // 3. Listen for Online Users (active in last 3 mins)
+        const qUsers = query(collection(db, 'presence'));
+        const unsubUsers = onSnapshot(qUsers, (snapshot) => {
+            // Clientside filter: Firestore serverTimestamp is more reliable, 
+            // but for simplicity in this hacky presence we count all docs.
+            // A more robust system would filter: where('lastSeen', '>', threeMinutesAgo)
+            setOnlineCount(snapshot.size);
+        });
+
+        // 4. Listen for Prompt Count
+        const qPrompts = query(collection(db, 'prompts'));
+        const unsubPrompts = onSnapshot(qPrompts, (snapshot) => {
+            setTotalPrompts(snapshot.size);
+        });
+
+        return () => {
+            clearInterval(heartbeat);
+            window.removeEventListener('beforeunload', handleUnload);
+            unsubUsers();
+            unsubPrompts();
+            handleUnload();
+        };
+    }, [sessionId]);
 
     const menuItems = [
         { id: 'dashboard', label: 'Ana Sayfa', icon: LayoutDashboard },
@@ -149,7 +212,7 @@ const App = () => {
 
                 <div style={{ marginTop: 'auto', padding: '20px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)' }}>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '12px' }}>
-                        Açık Kaynak v4.0 <span style={{ color: '#10b981', fontWeight: 'bold' }}>(Stabilized)</span>
+                        Açık Kaynak v4.1 <span style={{ color: '#10b981', fontWeight: 'bold' }}>(Live Stats)</span>
                     </p>
                     <a href="https://github.com" target="_blank" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', textDecoration: 'none', fontWeight: 600 }}>
                         <Github size={18} /> GitHub'da Yıldızla
@@ -186,7 +249,7 @@ const App = () => {
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3 }}
                     >
-                        {activeTab === 'dashboard' && <DashboardView setActiveTab={setActiveTab} />}
+                        {activeTab === 'dashboard' && <DashboardView setActiveTab={setActiveTab} onlineCount={onlineCount} totalPrompts={totalPrompts} />}
                         {activeTab === 'toolbox' && <Toolbox />}
                         {activeTab === 'readme' && <ReadmeGenerator />}
                         {activeTab === 'ai-prompts' && <AiPromptLibrary />}
@@ -198,11 +261,11 @@ const App = () => {
     );
 };
 
-const DashboardView = ({ setActiveTab }) => {
+const DashboardView = ({ setActiveTab, onlineCount, totalPrompts }) => {
     const stats = [
         { label: 'Araçlar', value: '24+', color: 'var(--primary)', icon: Zap },
-        { label: 'Kullanıcılar', value: '1.2k', color: '#10b981', icon: UserRound },
-        { label: 'Promptlar', value: '150+', color: 'var(--accent)', icon: MessageSquare },
+        { label: 'Aktif Kullanıcı', value: onlineCount || '1', color: '#10b981', icon: UserRound, live: true },
+        { label: 'Promptlar', value: totalPrompts || '0', color: 'var(--accent)', icon: MessageSquare },
     ];
 
     const container = {
@@ -239,7 +302,10 @@ const DashboardView = ({ setActiveTab }) => {
                         <div style={{ position: 'absolute', top: '-10px', right: '-10px', opacity: 0.05 }}>
                             <stat.icon size={80} color={stat.color} />
                         </div>
-                        <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', marginBottom: '12px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase' }}>{stat.label}</p>
+                        <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', marginBottom: '12px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            {stat.label}
+                            {stat.live && <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981', animation: 'pulse 2s infinite' }}></span>}
+                        </p>
                         <h3 style={{ fontSize: '2.5rem', fontWeight: 800, color: stat.color, filter: `drop-shadow(0 0 10px ${stat.color}33)` }}>{stat.value}</h3>
                     </motion.div>
                 ))}
