@@ -50,55 +50,55 @@ const AiPromptLibrary = () => {
 
     const handleAddPrompt = async (e) => {
         e.preventDefault();
-        console.log("Attempting to add prompt:", newPrompt);
 
         if (!newPrompt.title || !newPrompt.content || !newPrompt.author) {
-            console.warn("Validation failed: Missing fields", newPrompt);
             alert("Lütfen tüm alanları doldurunuz (Adınız, Başlık ve Prompt İçeriği).");
             return;
         }
 
         setIsSubmitting(true);
         try {
-            console.log("Adding document to Firestore...");
             await addDoc(collection(db, 'prompts'), {
                 ...newPrompt,
                 votes: 0,
                 createdAt: new Date().toISOString()
             });
-            console.log("Document added successfully");
+
             setNewPrompt({ title: '', content: '', category: 'code', author: '' });
             setShowAddForm(false);
-            alert("Prompt başarıyla paylaşıldı!");
+            // Use a non-blocking notification or simply close the modal
+            // alert("Prompt başarıyla paylaşıldı!"); 
         } catch (error) {
             console.error("Error adding prompt:", error);
             alert(`Sorgu eklenirken hata oluştu: ${error.message}`);
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
     const handleLike = async (id) => {
-        if (votingInProgress.has(id)) {
-            console.log("Voting already in progress for:", id);
-            return;
-        }
+        if (votingInProgress.has(id)) return;
 
-        const isCurrentlyLiked = likedPromptsRef.current.includes(id);
+        // Ensure id is treated consistently (as string)
+        const promptId = String(id);
+        const isCurrentlyLiked = likedPrompts.includes(promptId);
 
-        // Optimistic UI/Logic Lock
-        setVotingInProgress(prev => new Set(prev).add(id));
+        setVotingInProgress(prev => new Set(prev).add(promptId));
 
         try {
-            const promptRef = doc(db, 'prompts', id);
+            const promptRef = doc(db, 'prompts', promptId);
+
             if (isCurrentlyLiked) {
                 // Unlike
-                setLikedPrompts(prev => prev.filter(pId => pId !== id));
+                const newLikedPrompts = likedPrompts.filter(pId => pId !== promptId);
+                setLikedPrompts(newLikedPrompts);
                 await updateDoc(promptRef, {
                     votes: increment(-1)
                 });
             } else {
                 // Like
-                setLikedPrompts(prev => [...prev, id]);
+                const newLikedPrompts = [...likedPrompts, promptId];
+                setLikedPrompts(newLikedPrompts);
                 await updateDoc(promptRef, {
                     votes: increment(1)
                 });
@@ -107,19 +107,18 @@ const AiPromptLibrary = () => {
             console.error("Error updating votes:", error);
             // Revert on error
             if (isCurrentlyLiked) {
-                setLikedPrompts(prev => [...prev, id]);
+                setLikedPrompts(prev => [...prev, promptId]);
             } else {
-                setLikedPrompts(prev => prev.filter(pId => pId !== id));
+                setLikedPrompts(prev => prev.filter(pId => pId !== promptId));
             }
         } finally {
-            // Add a small delay to prevent rapid-fire clicking
             setTimeout(() => {
                 setVotingInProgress(prev => {
                     const next = new Set(prev);
-                    next.delete(id);
+                    next.delete(promptId);
                     return next;
                 });
-            }, 300);
+            }, 500);
         }
     };
 
