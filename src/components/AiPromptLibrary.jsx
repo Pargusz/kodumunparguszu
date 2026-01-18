@@ -10,7 +10,8 @@ import {
     doc,
     increment,
     query,
-    orderBy
+    orderBy,
+    serverTimestamp
 } from 'firebase/firestore';
 
 const AiPromptLibrary = () => {
@@ -61,7 +62,7 @@ const AiPromptLibrary = () => {
         return () => unsubscribe();
     }, []);
 
-    const handleAddPrompt = (e) => {
+    const handleAddPrompt = async (e) => {
         e.preventDefault();
 
         if (!newPrompt.title || !newPrompt.content || !newPrompt.author) {
@@ -70,26 +71,26 @@ const AiPromptLibrary = () => {
         }
 
         setIsSubmitting(true);
+        setError(null);
 
-        // Firestore işlemi arka planda devam etsin (Optimistic UI)
-        // Kullanıcıyı bekletmemek için modalı hemen kapatıyoruz.
-        addDoc(collection(db, 'prompts'), {
-            ...newPrompt,
-            votes: 0,
-            createdAt: new Date().toISOString()
-        })
-            .then(() => {
-                console.log("Prompt başarıyla sunucuya iletildi.");
-            })
-            .catch((error) => {
-                console.error("Error adding prompt:", error);
-                alert(`Bir hata oluştu: ${error.message}`);
+        try {
+            await addDoc(collection(db, 'prompts'), {
+                ...newPrompt,
+                votes: 0,
+                createdAt: serverTimestamp() // Sunucu zamanını kullan
             });
 
-        // Formu temizle ve kapat
-        setNewPrompt({ title: '', content: '', category: 'code', author: '' });
-        setShowAddForm(false);
-        setIsSubmitting(false);
+            console.log("Prompt başarıyla kaydedildi (Server Write Confirmed).");
+            setNewPrompt({ title: '', content: '', category: 'code', author: '' });
+            setShowAddForm(false);
+            alert("Prompt başarıyla yayınlandı!"); // Kullanıcıya net geri bildirim
+        } catch (error) {
+            console.error("Error adding prompt:", error);
+            setError(`Yayınlama hatası: ${error.message} (Lütfen yetkilerinizi kontrol edin)`);
+            alert(`Hata oluştu: ${error.message}`);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleLike = async (id) => {
