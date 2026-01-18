@@ -139,12 +139,17 @@ const AiPromptLibrary = () => {
         { id: 'test', label: 'Test Yazımı' },
     ];
 
-    const filteredPrompts = prompts.filter(p =>
-        (activeCategory === 'all' || p.category === activeCategory) &&
-        (p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (p.author && p.author.toLowerCase().includes(searchTerm.toLowerCase())))
-    ).sort((a, b) => {
+    const filteredPrompts = prompts.filter(p => {
+        const pTitle = p.title || '';
+        const pContent = p.content || '';
+        const pAuthor = p.author || '';
+        const searchLower = searchTerm.toLowerCase();
+
+        return (activeCategory === 'all' || p.category === activeCategory) &&
+            (pTitle.toLowerCase().includes(searchLower) ||
+                pContent.toLowerCase().includes(searchLower) ||
+                (pAuthor && pAuthor.toLowerCase().includes(searchLower)))
+    }).sort((a, b) => {
         if (sortBy === 'popular') {
             return (b.votes || 0) - (a.votes || 0);
         } else {
