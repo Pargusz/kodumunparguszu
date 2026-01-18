@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Copy, ThumbsUp, Plus, X, Send, User, Clock, AlertCircle } from 'lucide-react';
+import { Search, Copy, ThumbsUp, Plus, X, Send, User, Clock, AlertCircle, TrendingUp, Calendar } from 'lucide-react';
 import { db } from '../firebase';
 import {
     collection,
@@ -15,6 +15,7 @@ import {
 
 const AiPromptLibrary = () => {
     const [activeCategory, setActiveCategory] = useState('all');
+    const [sortBy, setSortBy] = useState('newest'); // 'newest' or 'popular'
     const [searchTerm, setSearchTerm] = useState('');
     const [prompts, setPrompts] = useState([]);
     const [showAddForm, setShowAddForm] = useState(false);
@@ -39,7 +40,8 @@ const AiPromptLibrary = () => {
 
     // Fetch Prompts from Firestore
     useEffect(() => {
-        const q = query(collection(db, 'prompts'), orderBy('votes', 'desc'));
+        const sortField = sortBy === 'popular' ? 'votes' : 'createdAt';
+        const q = query(collection(db, 'prompts'), orderBy(sortField, 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const promptData = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -49,9 +51,9 @@ const AiPromptLibrary = () => {
             console.log("Prompts loaded:", promptData.length, "v1.2");
         });
         return () => unsubscribe();
-    }, []);
+    }, [sortBy]);
 
-    const handleAddPrompt = async (e) => {
+    const handleAddPrompt = (e) => {
         e.preventDefault();
 
         if (!newPrompt.title || !newPrompt.content || !newPrompt.author) {
@@ -60,29 +62,26 @@ const AiPromptLibrary = () => {
         }
 
         setIsSubmitting(true);
-        try {
-            // 15 saniye zaman aşımı
-            const timeout = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error("Sunucu yanıt vermedi (Zaman Aşımı). Lütfen internet bağlantınızı kontrol edip tekrar deneyin.")), 15000);
+
+        // Firestore işlemi arka planda devam etsin (Optimistic UI)
+        // Kullanıcıyı bekletmemek için modalı hemen kapatıyoruz.
+        addDoc(collection(db, 'prompts'), {
+            ...newPrompt,
+            votes: 0,
+            createdAt: new Date().toISOString()
+        })
+            .then(() => {
+                console.log("Prompt başarıyla sunucuya iletildi.");
+            })
+            .catch((error) => {
+                console.error("Error adding prompt:", error);
+                alert(`Bir hata oluştu: ${error.message}`);
             });
 
-            await Promise.race([
-                addDoc(collection(db, 'prompts'), {
-                    ...newPrompt,
-                    votes: 0,
-                    createdAt: new Date().toISOString()
-                }),
-                timeout
-            ]);
-
-            setNewPrompt({ title: '', content: '', category: 'code', author: '' });
-            setShowAddForm(false); // Sadece başarılıysa kapat
-        } catch (error) {
-            console.error("Error adding prompt:", error);
-            alert(`Hata: ${error.message}`);
-        } finally {
-            setIsSubmitting(false);
-        }
+        // Formu temizle ve kapat
+        setNewPrompt({ title: '', content: '', category: 'code', author: '' });
+        setShowAddForm(false);
+        setIsSubmitting(false);
     };
 
     const handleLike = async (id) => {
@@ -172,6 +171,49 @@ const AiPromptLibrary = () => {
                             {cat.label}
                         </button>
                     ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '12px' }}>
+                    <button
+                        onClick={() => setSortBy('newest')}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 16px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            background: sortBy === 'newest' ? 'var(--bg-card)' : 'transparent',
+                            color: sortBy === 'newest' ? 'white' : 'var(--text-dim)',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            transition: 'all 0.3s ease',
+                            boxShadow: sortBy === 'newest' ? '0 4px 12px rgba(0,0,0,0.1)' : 'none'
+                        }}
+                    >
+                        <Calendar size={14} /> Yeni
+                    </button>
+                    <button
+                        onClick={() => setSortBy('popular')}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 16px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            background: sortBy === 'popular' ? 'var(--bg-card)' : 'transparent',
+                            color: sortBy === 'popular' ? 'white' : 'var(--text-dim)',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            transition: 'all 0.3s ease',
+                            boxShadow: sortBy === 'popular' ? '0 4px 12px rgba(0,0,0,0.1)' : 'none'
+                        }}
+                    >
+                        <TrendingUp size={14} /> Popüler
+                    </button>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, justifyContent: 'flex-end', minWidth: '300px' }}>
