@@ -40,18 +40,17 @@ const AiPromptLibrary = () => {
 
     // Fetch Prompts from Firestore
     useEffect(() => {
-        const sortField = sortBy === 'popular' ? 'votes' : 'createdAt';
-        const q = query(collection(db, 'prompts'), orderBy(sortField, 'desc'));
+        const q = query(collection(db, 'prompts'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const promptData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
             setPrompts(promptData);
-            console.log("Prompts loaded:", promptData.length, "v1.2");
+            console.log("Prompts loaded:", promptData.length, "v1.3");
         });
         return () => unsubscribe();
-    }, [sortBy]);
+    }, []);
 
     const handleAddPrompt = (e) => {
         e.preventDefault();
@@ -145,7 +144,16 @@ const AiPromptLibrary = () => {
         (p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (p.author && p.author.toLowerCase().includes(searchTerm.toLowerCase())))
-    );
+    ).sort((a, b) => {
+        if (sortBy === 'popular') {
+            return (b.votes || 0) - (a.votes || 0);
+        } else {
+            // Newest - default sort
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return dateB - dateA;
+        }
+    });
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
