@@ -25,7 +25,9 @@ const AiPromptLibrary = () => {
     // Use state for UI and Ref for synchronous logic to prevent race conditions
     const [likedPrompts, setLikedPrompts] = useState(() => {
         const saved = localStorage.getItem('parguszu_liked_prompts');
-        return saved ? JSON.parse(saved) : [];
+        // Ensure all saved IDs are converted to strings to prevent type mismatches
+        const parsed = saved ? JSON.parse(saved) : [];
+        return Array.isArray(parsed) ? parsed.map(id => String(id)) : [];
     });
     const likedPromptsRef = useRef(likedPrompts);
 
@@ -44,6 +46,7 @@ const AiPromptLibrary = () => {
                 ...doc.data()
             }));
             setPrompts(promptData);
+            console.log("Prompts loaded:", promptData.length, "v1.2");
         });
         return () => unsubscribe();
     }, []);
@@ -66,13 +69,13 @@ const AiPromptLibrary = () => {
 
             setNewPrompt({ title: '', content: '', category: 'code', author: '' });
             setShowAddForm(false);
-            // Use a non-blocking notification or simply close the modal
-            // alert("Prompt başarıyla paylaşıldı!"); 
         } catch (error) {
             console.error("Error adding prompt:", error);
             alert(`Sorgu eklenirken hata oluştu: ${error.message}`);
         } finally {
             setIsSubmitting(false);
+            // Ensure modal is closed successfully
+            setShowAddForm(false);
         }
     };
 
@@ -82,6 +85,8 @@ const AiPromptLibrary = () => {
         // Ensure id is treated consistently (as string)
         const promptId = String(id);
         const isCurrentlyLiked = likedPrompts.includes(promptId);
+
+        console.log(`Toggling like for: ${promptId}, currently liked: ${isCurrentlyLiked}`);
 
         setVotingInProgress(prev => new Set(prev).add(promptId));
 
