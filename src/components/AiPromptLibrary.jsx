@@ -23,6 +23,9 @@ const AiPromptLibrary = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [votingInProgress, setVotingInProgress] = useState(new Set());
 
+    const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(true);
+
     // Use state for UI and Ref for synchronous logic to prevent race conditions
     const [likedPrompts, setLikedPrompts] = useState(() => {
         const saved = localStorage.getItem('parguszu_liked_prompts');
@@ -47,7 +50,13 @@ const AiPromptLibrary = () => {
                 ...doc.data()
             }));
             setPrompts(promptData);
-            console.log("Prompts loaded:", promptData.length, "v1.3");
+            setLoading(false);
+            setError(null);
+            console.log("Prompts loaded:", promptData.length, "v1.5 - Debug Build");
+        }, (err) => {
+            console.error("Firestore read error:", err);
+            setError(`Veri yüklenemedi: ${err.message} (Kodu: ${err.code}). Lütfen internet bağlantınızı ve Firebase kurallarını kontrol edin.`);
+            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -162,6 +171,19 @@ const AiPromptLibrary = () => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            {error && (
+                <div style={{ padding: '16px', backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid var(--danger)', borderRadius: '12px', color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <AlertCircle size={24} />
+                    <span>{error}</span>
+                </div>
+            )}
+
+            {loading && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                    <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
                 <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
                     {categories.map(cat => (
