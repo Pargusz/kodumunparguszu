@@ -61,21 +61,27 @@ const AiPromptLibrary = () => {
 
         setIsSubmitting(true);
         try {
-            await addDoc(collection(db, 'prompts'), {
-                ...newPrompt,
-                votes: 0,
-                createdAt: new Date().toISOString()
+            // 15 saniye zaman aşımı
+            const timeout = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error("Sunucu yanıt vermedi (Zaman Aşımı). Lütfen internet bağlantınızı kontrol edip tekrar deneyin.")), 15000);
             });
 
+            await Promise.race([
+                addDoc(collection(db, 'prompts'), {
+                    ...newPrompt,
+                    votes: 0,
+                    createdAt: new Date().toISOString()
+                }),
+                timeout
+            ]);
+
             setNewPrompt({ title: '', content: '', category: 'code', author: '' });
-            setShowAddForm(false);
+            setShowAddForm(false); // Sadece başarılıysa kapat
         } catch (error) {
             console.error("Error adding prompt:", error);
-            alert(`Sorgu eklenirken hata oluştu: ${error.message}`);
+            alert(`Hata: ${error.message}`);
         } finally {
             setIsSubmitting(false);
-            // Ensure modal is closed successfully
-            setShowAddForm(false);
         }
     };
 
