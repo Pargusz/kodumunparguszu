@@ -10,8 +10,7 @@ import {
     doc,
     increment,
     query,
-    orderBy,
-    serverTimestamp
+    orderBy
 } from 'firebase/firestore';
 
 const AiPromptLibrary = () => {
@@ -53,7 +52,7 @@ const AiPromptLibrary = () => {
             setPrompts(promptData);
             setLoading(false);
             setError(null);
-            console.log("Prompts loaded:", promptData.length, "v1.5 - Debug Build");
+            console.log("Prompts loaded:", promptData.length, "v3.0 - Client First");
         }, (err) => {
             console.error("Firestore read error:", err);
             setError(`Veri yüklenemedi: ${err.message} (Kodu: ${err.code}). Lütfen internet bağlantınızı ve Firebase kurallarını kontrol edin.`);
@@ -62,7 +61,7 @@ const AiPromptLibrary = () => {
         return () => unsubscribe();
     }, []);
 
-    const handleAddPrompt = async (e) => {
+    const handleAddPrompt = (e) => {
         e.preventDefault();
 
         if (!newPrompt.title || !newPrompt.content || !newPrompt.author) {
@@ -73,24 +72,23 @@ const AiPromptLibrary = () => {
         setIsSubmitting(true);
         setError(null);
 
-        try {
-            await addDoc(collection(db, 'prompts'), {
-                ...newPrompt,
-                votes: 0,
-                createdAt: serverTimestamp() // Sunucu zamanını kullan
-            });
+        // v3.0 Client-First Strategy: Fire and Forget
+        const promptData = {
+            ...newPrompt,
+            votes: 0,
+            createdAt: new Date().toISOString()
+        };
 
-            console.log("Prompt başarıyla kaydedildi (Server Write Confirmed).");
-            setNewPrompt({ title: '', content: '', category: 'code', author: '' });
-            setShowAddForm(false);
-            alert("Prompt başarıyla yayınlandı!"); // Kullanıcıya net geri bildirim
-        } catch (error) {
-            console.error("Error adding prompt:", error);
-            setError(`Yayınlama hatası: ${error.message} (Lütfen yetkilerinizi kontrol edin)`);
-            alert(`Hata oluştu: ${error.message}`);
-        } finally {
-            setIsSubmitting(false);
-        }
+        // Fire request to background
+        addDoc(collection(db, 'prompts'), promptData)
+            .then(() => console.log("Background write success"))
+            .catch(err => console.error("Background write error:", err));
+
+        // Close UI immediately
+        setNewPrompt({ title: '', content: '', category: 'code', author: '' });
+        setShowAddForm(false);
+        setIsSubmitting(false);
+        alert("Prompt başarıyla yayınlandı! (Liste birazdan güncellenecektir)");
     };
 
     const handleLike = async (id) => {
