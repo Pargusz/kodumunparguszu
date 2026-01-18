@@ -21,8 +21,28 @@ import AiPromptLibrary from './components/AiPromptLibrary';
 import InterviewSimulator from './components/InterviewSimulator';
 
 const App = () => {
-    const [activeTab, setActiveTab] = useState('dashboard');
+    // Initialize active tab from URL hash or default to 'dashboard'
+    const getTabFromHash = () => {
+        const hash = window.location.hash.replace('#', '');
+        return hash || 'dashboard';
+    };
+
+    const [activeTab, setActiveTab] = useState(getTabFromHash);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    // Update active tab when hash changes (e.g. back/forward button)
+    React.useEffect(() => {
+        const handleHashChange = () => {
+            setActiveTab(getTabFromHash());
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
+
+    // Update hash when active tab changes
+    React.useEffect(() => {
+        window.location.hash = activeTab;
+    }, [activeTab]);
 
     const menuItems = [
         { id: 'dashboard', label: 'Ana Sayfa', icon: LayoutDashboard },
