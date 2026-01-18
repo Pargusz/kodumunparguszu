@@ -440,7 +440,7 @@ const AiPromptLibrary = () => {
                     );
                 })}
             </div>
-            {filteredPrompts.length === 0 && (
+            {!loading && filteredPrompts.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '120px 40px', color: 'var(--text-dim)' }} className="glass">
                     <Search size={64} style={{ marginBottom: '24px', opacity: 0.2 }} />
                     <h4 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>Sonuç Bulunamadı</h4>
