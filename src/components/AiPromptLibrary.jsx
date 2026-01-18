@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Copy, ThumbsUp, Plus, X, Send, User, Clock, AlertCircle, TrendingUp, Calendar, Wifi, WifiOff } from 'lucide-react';
+import { Search, Copy, ThumbsUp, Plus, X, Send, User, Clock, AlertCircle, TrendingUp, Calendar, Wifi, WifiOff, CheckCircle2 } from 'lucide-react';
 import { db } from '../firebase';
 import {
     collection,
@@ -15,19 +15,19 @@ import {
 
 const AiPromptLibrary = () => {
     const [activeCategory, setActiveCategory] = useState('all');
-    const [sortBy, setSortBy] = useState('newest'); // 'newest' or 'popular'
+    const [sortBy, setSortBy] = useState('newest');
     const [searchTerm, setSearchTerm] = useState('');
     const [prompts, setPrompts] = useState([]);
     const [showAddForm, setShowAddForm] = useState(false);
     const [newPrompt, setNewPrompt] = useState({ title: '', content: '', category: 'code', author: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showSuccessToast, setShowSuccessToast] = useState(false);
     const [votingInProgress, setVotingInProgress] = useState(new Set());
 
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [dbStatus, setDbStatus] = useState('connecting'); // connecting, online, error
+    const [dbStatus, setDbStatus] = useState('connecting');
 
-    // Use state for UI and Ref for synchronous logic to prevent race conditions
     const [likedPrompts, setLikedPrompts] = useState(() => {
         const saved = localStorage.getItem('parguszu_liked_prompts');
         const parsed = saved ? JSON.parse(saved) : [];
@@ -35,15 +35,13 @@ const AiPromptLibrary = () => {
     });
     const likedPromptsRef = useRef(likedPrompts);
 
-    // Sync Ref and LocalStorage with State
     useEffect(() => {
         likedPromptsRef.current = likedPrompts;
         localStorage.setItem('parguszu_liked_prompts', JSON.stringify(likedPrompts));
     }, [likedPrompts]);
 
-    // Fetch Prompts from Firestore
+    // Single source of truth for all prompts - Firestore Realtime Sync
     useEffect(() => {
-        console.log("Initializing Firestore sync... v3.2 Diagnostic Build");
         const q = query(collection(db, 'prompts'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const promptData = snapshot.docs.map(doc => ({
@@ -54,10 +52,9 @@ const AiPromptLibrary = () => {
             setLoading(false);
             setError(null);
             setDbStatus('online');
-            console.log(`[Firestore] Sync OK - ${promptData.length} items loaded. Metadata:`, snapshot.metadata);
         }, (err) => {
-            console.error("[Firestore] Sync Failed:", err);
-            setError(`Veritabanı Hatası: ${err.message}`);
+            console.error("Firestore Error:", err);
+            setError(`Bağlantı Sorunu: ${err.message}`);
             setDbStatus('error');
             setLoading(false);
         });
@@ -66,15 +63,10 @@ const AiPromptLibrary = () => {
 
     const handleAddPrompt = async (e) => {
         e.preventDefault();
-
-        if (!newPrompt.title || !newPrompt.content || !newPrompt.author) {
-            alert("Lütfen tüm alanları doldurunuz.");
-            return;
-        }
+        if (!newPrompt.title || !newPrompt.content || !newPrompt.author) return;
 
         setIsSubmitting(true);
         setError(null);
-        console.log("[Diagnostic] Attempting to save prompt:", newPrompt.title);
 
         const promptData = {
             ...newPrompt,
@@ -82,26 +74,18 @@ const AiPromptLibrary = () => {
             createdAt: new Date().toISOString()
         };
 
-        // v3.2 Strict Timed Write
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Zaman Aşımı: Sunucu 10 saniye boyunca yanıt vermedi. Lütfen internetinizi veya Firebase kurallarını kontrol edin.")), 10000)
-        );
-
         try {
-            console.log("[Diagnostic] Sending to Firestore...");
-            await Promise.race([
-                addDoc(collection(db, 'prompts'), promptData),
-                timeoutPromise
-            ]);
+            // v4.0: Wait for server confirmation now that rules are fixed
+            await addDoc(collection(db, 'prompts'), promptData);
 
-            console.log("[Diagnostic] Save Success confirmed by server!");
+            // On success
             setNewPrompt({ title: '', content: '', category: 'code', author: '' });
             setShowAddForm(false);
-            alert("Prompt başarıyla kaydedildi ve tüm kullanıcılara yayınlandı!");
+            setShowSuccessToast(true);
+            setTimeout(() => setShowSuccessToast(false), 3000);
         } catch (err) {
-            console.error("[Diagnostic] Save Failed:", err);
-            setError(`Yayınlama Hatası: ${err.message}`);
-            alert(`Hata: ${err.message}\n\nEğer bu sorun devam ederse, Firebase Rules ayarlarınızı kontrol edin.`);
+            console.error("Save error:", err);
+            setError(`Kaydetme hatası: ${err.message}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -133,7 +117,7 @@ const AiPromptLibrary = () => {
                     next.delete(promptId);
                     return next;
                 });
-            }, 500);
+            }, 400);
         }
     };
 
@@ -154,12 +138,9 @@ const AiPromptLibrary = () => {
     const filteredPrompts = prompts.filter(p => {
         const pTitle = p.title || '';
         const pContent = p.content || '';
-        const pAuthor = p.author || '';
         const searchLower = searchTerm.toLowerCase();
         return (activeCategory === 'all' || p.category === activeCategory) &&
-            (pTitle.toLowerCase().includes(searchLower) ||
-                pContent.toLowerCase().includes(searchLower) ||
-                (pAuthor && pAuthor.toLowerCase().includes(searchLower)))
+            (pTitle.toLowerCase().includes(searchLower) || pContent.toLowerCase().includes(searchLower) || (p.author && p.author.toLowerCase().includes(searchLower)))
     }).sort((a, b) => {
         if (sortBy === 'popular') return (b.votes || 0) - (a.votes || 0);
         return getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
@@ -167,38 +148,27 @@ const AiPromptLibrary = () => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '0.75rem',
-                    padding: '6px 14px',
-                    borderRadius: '20px',
-                    background: dbStatus === 'online' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                    color: dbStatus === 'online' ? '#10b981' : '#ef4444',
-                    fontWeight: 700
-                }}>
-                    {dbStatus === 'online' ? <Wifi size={14} /> : <WifiOff size={14} />}
-                    {dbStatus === 'connecting' ? 'BAĞLANILIYOR...' : dbStatus === 'online' ? 'VERİTABANI CANLI' : 'BAĞLANTI HATASI'}
-                </div>
-                {dbStatus === 'online' && (
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                        Toplulukta {prompts.length} prompt mevcut
-                    </div>
+            {/* Success Toast */}
+            <AnimatePresence>
+                {showSuccessToast && (
+                    <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }} style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, background: '#10b981', color: 'white', padding: '12px 24px', borderRadius: '40px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 10px 30px rgba(16, 185, 129, 0.4)' }}>
+                        <CheckCircle2 size={20} />
+                        <span style={{ fontWeight: 700 }}>Prompt Yayınlandı!</span>
+                    </motion.div>
                 )}
+            </AnimatePresence>
+
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', padding: '5px 12px', borderRadius: '20px', background: dbStatus === 'online' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: dbStatus === 'online' ? '#10b981' : '#ef4444', fontWeight: 800 }}>
+                    {dbStatus === 'online' ? <Wifi size={12} /> : <WifiOff size={12} />}
+                    {dbStatus === 'online' ? 'VERİTABANI CANLI' : 'BAĞLANTI YOK'}
+                </div>
             </div>
 
             {error && (
                 <div style={{ padding: '16px', backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid var(--danger)', borderRadius: '12px', color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <AlertCircle size={24} />
                     <span>{error}</span>
-                </div>
-            )}
-
-            {loading && (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-                    <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
                 </div>
             )}
 
@@ -223,13 +193,19 @@ const AiPromptLibrary = () => {
                 <div style={{ display: 'flex', gap: '12px', flex: 1, justifyContent: 'flex-end', minWidth: '300px' }}>
                     <div className="glass" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 20px', flex: 1, maxWidth: '400px' }}>
                         <Search size={18} color="var(--text-dim)" />
-                        <input type="text" placeholder="Ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ background: 'none', border: 'none', color: 'white', width: '100%', outline: 'none' }} />
+                        <input type="text" placeholder="Prompt veya yazar ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ background: 'none', border: 'none', color: 'white', width: '100%', outline: 'none' }} />
                     </div>
                     <button className="btn-primary" onClick={() => setShowAddForm(true)} style={{ padding: '12px 24px', borderRadius: '14px' }}>
                         <Plus size={20} /> <span className="mobile-hide">Yeni Ekle</span>
                     </button>
                 </div>
             </div>
+
+            {loading && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
+                    <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                </div>
+            )}
 
             <AnimatePresence>
                 {showAddForm && (
@@ -246,9 +222,9 @@ const AiPromptLibrary = () => {
                                     </select>
                                 </div>
                                 <input type="text" required placeholder="Başlık..." className="glass" style={{ width: '100%', padding: '14px', color: 'white', borderRadius: '12px' }} value={newPrompt.title} onChange={(e) => setNewPrompt({ ...newPrompt, title: e.target.value })} />
-                                <textarea required placeholder="Komut..." className="glass" style={{ width: '100%', height: '140px', padding: '14px', color: 'white', borderRadius: '12px', resize: 'none' }} value={newPrompt.content} onChange={(e) => setNewPrompt({ ...newPrompt, content: e.target.value })} />
+                                <textarea required placeholder="Komutu buraya yazın..." className="glass" style={{ width: '100%', height: '140px', padding: '14px', color: 'white', borderRadius: '12px', resize: 'none' }} value={newPrompt.content} onChange={(e) => setNewPrompt({ ...newPrompt, content: e.target.value })} />
                                 <button className="btn-primary" disabled={isSubmitting} style={{ justifyContent: 'center', padding: '16px', fontSize: '1rem' }}>
-                                    {isSubmitting ? 'SUNUCUYA KAYDEDİLİYOR...' : 'Yayınla'} <Send size={18} />
+                                    {isSubmitting ? 'Yayınlanıyor...' : 'Yayınla'} <Send size={18} />
                                 </button>
                             </form>
                         </motion.div>
@@ -260,32 +236,43 @@ const AiPromptLibrary = () => {
                 {filteredPrompts.map(prompt => {
                     const isLiked = likedPrompts.includes(prompt.id);
                     return (
-                        <motion.div layout key={prompt.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass card-hover" style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '16px', border: isLiked ? '1px solid var(--primary)' : '1px solid var(--glass-border)' }}>
+                        <motion.div layout key={prompt.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass card-hover" style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '16px', border: isLiked ? '1px solid var(--primary)' : '1px solid var(--glass-border)', position: 'relative' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <div>
                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-                                        <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', padding: '4px 10px', borderRadius: '20px', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 800 }}>{categories.find(c => c.id === prompt.category)?.label}</span>
+                                        <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', padding: '4px 10px', borderRadius: '20px', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 800 }}>{categories.find(c => c.id === prompt.category)?.label}</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-dim)', fontSize: '0.7rem' }}>
                                             <Clock size={10} /> {new Date(getTimestamp(prompt.createdAt)).toLocaleDateString()}
                                         </div>
                                     </div>
                                     <h4 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '6px' }}>{prompt.title}</h4>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
-                                        <User size={12} color="var(--primary)" /> <span style={{ fontWeight: 600 }}>{prompt.author || 'Anonim'}</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '0.8rem' }}>
+                                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--bg-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--glass-border)' }}>
+                                            <User size={12} color="var(--primary)" />
+                                        </div>
+                                        <span style={{ fontWeight: 600 }}>{prompt.author || 'Anonim'}</span>
                                     </div>
                                 </div>
                             </div>
-                            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.95rem', lineHeight: '1.7', height: '80px', overflow: 'hidden' }}>{prompt.content}</p>
+                            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.95rem', lineHeight: '1.7', height: '80px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{prompt.content}</p>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                                <button onClick={() => handleLike(prompt.id)} style={{ background: isLiked ? 'var(--primary)' : 'rgba(255,255,255,0.05)', border: 'none', color: isLiked ? 'white' : 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '12px', fontWeight: 700 }}>
+                                <button onClick={() => handleLike(prompt.id)} style={{ background: isLiked ? 'var(--primary)' : 'rgba(255,255,255,0.05)', border: 'none', color: isLiked ? 'white' : 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '12px', fontWeight: 700, transition: 'all 0.3s ease' }}>
                                     <ThumbsUp size={18} fill={isLiked ? "white" : "none"} /> <span>{prompt.votes || 0}</span>
                                 </button>
-                                <button className="btn-primary" style={{ padding: '10px 24px', fontSize: '0.9rem', borderRadius: '12px' }} onClick={() => { navigator.clipboard.writeText(prompt.content); alert('Kopyalandı!'); }}><Copy size={18} /> Kopyala</button>
+                                <button className="btn-primary" style={{ padding: '10px 24px', fontSize: '0.9rem', borderRadius: '12px' }} onClick={() => { navigator.clipboard.writeText(prompt.content); alert('Prompt kopyalandı!'); }}><Copy size={18} /> Kopyala</button>
                             </div>
                         </motion.div>
                     );
                 })}
             </div>
+
+            {!loading && filteredPrompts.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '120px 40px', color: 'var(--text-dim)' }} className="glass">
+                    <Search size={64} style={{ marginBottom: '24px', opacity: 0.2 }} />
+                    <h4 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>Sonuç Bulunamadı</h4>
+                    <p>Farklı bir arama terimi deneyin veya ilk promptu siz ekleyin!</p>
+                </div>
+            )}
         </div>
     );
 };
