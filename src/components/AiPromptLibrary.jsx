@@ -139,6 +139,17 @@ const AiPromptLibrary = () => {
         }
     };
 
+    // Helper to safely parse dates (String ISO or Firestore Timestamp)
+    const getTimestamp = (dateInput) => {
+        if (!dateInput) return 0;
+        // If it's a Firestore Timestamp (has toDate method)
+        if (dateInput.toDate && typeof dateInput.toDate === 'function') {
+            return dateInput.toDate().getTime();
+        }
+        // If it's a string or Date object
+        return new Date(dateInput).getTime();
+    };
+
     const categories = [
         { id: 'all', label: 'Tümü' },
         { id: 'code', label: 'Kodlama' },
@@ -162,8 +173,8 @@ const AiPromptLibrary = () => {
             return (b.votes || 0) - (a.votes || 0);
         } else {
             // Newest - default sort
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            const dateA = getTimestamp(a.createdAt);
+            const dateB = getTimestamp(b.createdAt);
             return dateB - dateA;
         }
     });
@@ -248,6 +259,12 @@ const AiPromptLibrary = () => {
                     >
                         <TrendingUp size={14} /> Popüler
                     </button>
+                    {!loading && (
+                        <div style={{ marginLeft: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#10b981', fontWeight: 700, background: 'rgba(16, 185, 129, 0.1)', padding: '6px 12px', borderRadius: '20px' }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981', animation: 'pulse 2s infinite' }}></div>
+                            CANLI
+                        </div>
+                    )}
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, justifyContent: 'flex-end', minWidth: '300px' }}>
